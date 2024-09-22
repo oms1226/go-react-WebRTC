@@ -20,6 +20,8 @@ func CreateRoomRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Println(AllRooms.Map)
 	json.NewEncoder(w).Encode(resp{RoomID: roomID})
+	//방마다 1개의 브로드캐스팅만 만들어야 된다!
+	go broadcaster()
 }
 
 var upgrader = websocket.Upgrader{
@@ -40,14 +42,13 @@ func broadcaster() {
 	for {
 		msg := <-broadcast
 		for _, client := range AllRooms.Map[msg.RoomID] {
-			if client.Conn != msg.Client {
+			if client.Conn != nil && client.Conn != msg.Client {
 				err := client.Conn.WriteJSON(msg.Message)
 
 				if err != nil {
-					log.Fatal(err)
+					log.Println(err)
 					client.Conn.Close()
 				}
-
 			}
 		}
 	}
@@ -68,23 +69,23 @@ func JoinRoomRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 	AllRooms.InsertIntoRoom(roomID[0], false, ws)
 
-	go broadcaster()
+	go func() {
+		for {
+			var msg broadcastMsg
 
-	for {
-		var msg broadcastMsg
+			err := ws.ReadJSON(&msg.Message)
+			if err != nil {
+				log.Printf("Read Error:", err)
+				break
+			}
 
-		err := ws.ReadJSON(&msg.Message)
-		if err != nil {
-			log.Fatal("Read Error:", err)
+			msg.Client = ws
+			msg.RoomID = roomID[0]
+
+			log.Println(msg.Message)
+
+			broadcast <- msg
 		}
-
-		msg.Client = ws
-		msg.RoomID = roomID[0]
-
-		log.Println(msg.Message)
-
-		broadcast <- msg
-
-	}
+	}()
 
 }

@@ -8,7 +8,10 @@ const Room = () => {
     const partnerVideo = useRef();
     const peerRef = useRef();
     const webSocketRef = useRef();
-    
+
+    const sleep = (ms) => {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    };
 
     const openCamera = async () => {
         const constraints = {
@@ -22,23 +25,32 @@ const Room = () => {
         })
     };
     useEffect(() => {
-        openCamera().then( async() => {
+        console.log("useEffect call");
+        const initialize = async () => {
+        // openCamera().then( async() => {
+            // await sleep(3000)
+            console.log("initialize call");
+            await openCamera();
             const roomID = location.pathname.split("/");
             webSocketRef.current = new WebSocket(`ws://localhost:8000/join?roomID=${roomID[2]}`)
 
-            
+
            await webSocketRef.current.addEventListener("open", () => {
-                webSocketRef.current.send(JSON.stringify({ join: true }));
+               console.log("addEventListener open");
+               webSocketRef.current.send(JSON.stringify({ join: true }));
             });
 
             await webSocketRef.current.addEventListener("message", async (e) => {
+                console.log("addEventListener message");
                 const message = JSON.parse(e.data);
 
                 if (message.join) {
+                    console.log("Receiving join");
                     callUser();
                 }
 
 				if (message.offer) {
+                    console.log("Receiving offer");
                     handleOffer(message.offer);
                 }
 
@@ -63,8 +75,8 @@ const Room = () => {
                 }
                 
             })
-    
-        })
+        }
+        initialize();
     });
 
     const handleOffer = async (offer) => {
@@ -75,9 +87,13 @@ const Room = () => {
             new RTCSessionDescription(offer)
         );
 
-        await userStream.current.getTracks().forEach((track) => {
-            peerRef.current.addTrack(track, userStream.current);
-        });
+        if (userStream.current != null) {
+            await userStream.current.getTracks().forEach((track) => {
+                console.log("handleOffer userStream addTrack");
+                peerRef.current.addTrack(track, userStream.current);
+            });
+        }
+
 
         const answer = await peerRef.current.createAnswer();
         await peerRef.current.setLocalDescription(answer);
@@ -92,6 +108,7 @@ const Room = () => {
         peerRef.current = createPeer();
 
         await userStream.current.getTracks().forEach(async (track) => {
+            console.log("callUser userStream addTrack");
             await peerRef.current.addTrack(track, userStream.current);
         });
     };
@@ -155,17 +172,25 @@ const Room = () => {
         </div>
 
         <div style={{
-            display : "flex",
-            justifyContent : "center",
-            alignItems : "center",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
             top: "100px",
             right: "100px",
             borderRadius: "10px",
             overflow: "hidden",
-            }}>
+        }}>
 
-            <video playsInline  autoPlay muted controls={true} ref={userVideo} />
-            <video playsInline autoPlay controls={true} ref={partnerVideo}/>
+            {/*<video playsInline autoPlay muted controls={true} ref={userVideo}/>*/}
+            <div style={{textAlign: "center", marginBottom: "10px"}}>
+                <h2>User Video</h2>
+                <video playsInline autoPlay muted controls={true} ref={userVideo}/>
+            </div>
+            {/*<video playsInline autoPlay controls={true} ref={partnerVideo}/>*/}
+            <div style={{textAlign: "center"}}>
+                <h2>Partner Video</h2>
+                <video playsInline autoPlay controls={true} ref={partnerVideo}/>
+            </div>
 
         </div>
     </div>
