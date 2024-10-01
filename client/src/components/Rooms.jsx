@@ -34,10 +34,15 @@ const Room = () => {
             const roomID = location.pathname.split("/");
             webSocketRef.current = new WebSocket(`ws://localhost:8000/join?roomID=${roomID[2]}`)
 
-
            await webSocketRef.current.addEventListener("open", () => {
                console.log("addEventListener open");
-               webSocketRef.current.send(JSON.stringify({ join: true }));
+               const checkConnection = setInterval(() => {
+                   if (webSocketRef.current.readyState === WebSocket.OPEN) {
+                       console.log("WebSocket connection opened and readyState is OPEN");
+                       webSocketRef.current.send(JSON.stringify({ join: true }));
+                       clearInterval(checkConnection);
+                   }
+               }, 1000);
             });
 
             await webSocketRef.current.addEventListener("message", async (e) => {
@@ -83,9 +88,17 @@ const Room = () => {
         console.log("Received Offer, Creating Answer");
         peerRef.current = createPeer();
 
-        await peerRef.current.setRemoteDescription(
-            new RTCSessionDescription(offer)
-        );
+        if (!peerRef.current || peerRef.current.signalingState !== "stable") {
+            console.error("Peer connection is not in a stable state");
+            return;
+        }
+
+        try {
+            await peerRef.current.setRemoteDescription(new RTCSessionDescription(offer));
+        } catch (error) {
+            console.error("Failed to set remote description:", error);
+            return;
+        }
 
         if (userStream.current != null) {
             await userStream.current.getTracks().forEach((track) => {
