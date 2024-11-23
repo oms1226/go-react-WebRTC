@@ -1,4 +1,4 @@
-import {useEffect, useRef} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {useLocation} from "react-router-dom";
 
 const Room = () => {
@@ -8,9 +8,38 @@ const Room = () => {
     const partnerVideo = useRef();
     const peerRef = useRef();
     const webSocketRef = useRef();
+    const [overlayText, setOverlayText] = useState('');
+    const [inputText, setInputText] = useState('');
 
     const sleep = (ms) => {
         return new Promise(resolve => setTimeout(resolve, ms));
+    };
+
+    const addTextOverlayToStream = (stream, text) => {
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+
+        video.addEventListener('loadedmetadata', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const draw = () => {
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                if (overlayText) {
+                    context.font = '30px Arial';
+                    context.fillStyle = 'white';
+                    context.fillText(overlayText, 10, 50);
+                }
+                requestAnimationFrame(draw);
+            };
+            draw();
+        });
+
+        return canvas.captureStream();
     };
 
     const openCamera = async () => {
@@ -20,17 +49,39 @@ const Room = () => {
 
         };
         navigator.mediaDevices.getUserMedia(constraints).then((stream) =>{
-            userVideo.current.srcObject = stream
-            userStream.current = stream
+            const overlayStream = addTextOverlayToStream(stream, "");
+            userVideo.current.srcObject = overlayStream;
+            userStream.current = overlayStream;
+
+            // Set fixed dimensions for the video element
+            userVideo.current.style.width = '64px'; // or any desired width
+            userVideo.current.style.height = '48px'; // or any desired height
         })
     };
+
+    const openScreen = async () => {
+        const constraints = {
+            video: true,
+            audio: true,
+        };
+        navigator.mediaDevices.getDisplayMedia(constraints).then((stream) => {
+            const overlayStream = addTextOverlayToStream(stream, "");
+            userVideo.current.srcObject = overlayStream;
+            userStream.current = overlayStream;
+
+            // Set fixed dimensions for the video element
+            userVideo.current.style.width = '640px'; // or any desired width
+            userVideo.current.style.height = '480px'; // or any desired height
+        });
+    };
+
     useEffect(() => {
         console.log("useEffect call");
         const initialize = async () => {
         // openCamera().then( async() => {
             // await sleep(3000)
             console.log("initialize call");
-            await openCamera();
+            await openScreen();
             const roomID = location.pathname.split("/");
             webSocketRef.current = new WebSocket(`ws://localhost:8000/join?roomID=${roomID[2]}`)
 
@@ -168,6 +219,12 @@ const Room = () => {
         partnerVideo.current.srcObject = e.streams[0];
     };
 
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            setInputText(e.target.value);
+            setOverlayText(e.target.value);
+        }
+    };
     
   return (
     <div>
@@ -204,7 +261,15 @@ const Room = () => {
                 <h2>Partner Video</h2>
                 <video playsInline autoPlay controls={true} ref={partnerVideo}/>
             </div>
-
+            <input
+                type="text"
+                placeholder="Enter text to overlay"
+                // value={inputText}
+                // onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleKeyDown}
+            />
+            <button onClick={openCamera}>Open Camera</button>
+            <button onClick={openScreen}>Share Screen</button>
         </div>
     </div>
   )
